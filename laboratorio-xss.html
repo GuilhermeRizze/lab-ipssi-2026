@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Laboratório XSS</title>
+</head>
+<body>
+
+<style>
+/* Layout: ferramenta de uma coluna para celular. Abas > controles > formulário > resultado > alertas > código. */
+:root{
+  --bg:#F3F6F9; --panel:#FFFFFF; --line:#D3DCE6; --fg:#14212F; --muted:#5A6B7D;
+  --accent:#0B7A85; --accent-fg:#FFFFFF; --bad:#C2412D; --bad-bg:#FBE9E5; --ok:#1E7F4F; --ok-bg:#E4F4EB; --warn-bg:#FFF3D6; --code:#EEF2F6;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; --mono:ui-monospace,Menlo,Consolas,"Courier New",monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1621; --panel:#16232F; --line:#2B4052; --fg:#E6EEF5; --muted:#93A7BA;
+  --accent:#4FD8E6; --accent-fg:#06232A; --bad:#FF8573; --bad-bg:#3A2320; --ok:#5BE0A0; --ok-bg:#16342A; --warn-bg:#3A3220; --code:#0B1520; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1621; --panel:#16232F; --line:#2B4052; --fg:#E6EEF5; --muted:#93A7BA;
+  --accent:#4FD8E6; --accent-fg:#06232A; --bad:#FF8573; --bad-bg:#3A2320; --ok:#5BE0A0; --ok-bg:#16342A; --warn-bg:#3A3220; --code:#0B1520; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--sans);margin:0;padding:16px 16px 40px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:1.45rem;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;font-size:.92rem}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.tab{flex:0 0 auto;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:500 .95rem var(--sans);padding:9px 14px;border-radius:8px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.lbl{font:600 .72rem var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{flex:1;border:0;background:transparent;color:var(--fg);font:500 .95rem var(--sans);padding:10px;cursor:pointer}
+.seg button[aria-pressed="true"].v{background:var(--bad);color:#fff}
+.seg button[aria-pressed="true"].s{background:var(--ok);color:#fff}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chk{display:flex;flex-direction:row;gap:10px;align-items:center;font-size:.95rem;color:var(--fg)}
+.chk input{width:20px;height:20px;accent-color:var(--accent)}
+input[type=text]{width:100%;font:1rem var(--mono);padding:11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+label{display:flex;flex-direction:column;gap:4px;font-size:.88rem;color:var(--muted)}
+.btn{border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);font:600 .95rem var(--sans);padding:10px 16px;border-radius:8px;cursor:pointer}
+.btn.alt{background:transparent;color:var(--accent)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.chips{display:flex;flex-direction:column;gap:6px}
+.chip{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--fg);padding:8px 10px;border-radius:8px;cursor:pointer;min-width:0}
+.chip b{font:600 .85rem var(--sans);color:var(--accent);flex:0 0 auto}
+.chip code{font:.82rem var(--mono);overflow-wrap:anywhere;color:var(--bad)}
+.frame{width:100%;height:170px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.log{display:flex;flex-direction:column;gap:6px}
+.ev{padding:9px 11px;border-radius:8px;font-size:.92rem;overflow-wrap:anywhere}
+.ev.a{background:var(--bad-bg);color:var(--bad)} .ev.c{background:var(--warn-bg)} .ev.n{background:var(--code);color:var(--muted)}
+pre{margin:0;background:var(--code);border:1px solid var(--line);border-radius:8px;padding:12px;font:.82rem/1.5 var(--mono);overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.note{font-size:.88rem;color:var(--muted);margin:0}
+.pill{display:inline-block;padding:3px 9px;border-radius:99px;font:600 .8rem var(--mono);background:var(--code);color:var(--fg)}
+.pill.on{background:var(--ok-bg);color:var(--ok)}
+</style>
+<div class="wrap">
+  <header>
+    <h1>Laboratório XSS</h1>
+    <p class="sub">IPSSI · roda só no seu navegador. Nada é enviado a lugar nenhum. Uso exclusivo em laboratório.</p>
+  </header>
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+
+  <section class="card" aria-label="Controles">
+    <span class="lbl">Versão da página</span>
+    <div class="seg"><button class="v" id="bv" aria-pressed="true">Vulnerável</button><button class="s" id="bs" aria-pressed="false">Segura</button></div>
+    <details><summary class="lbl" style="cursor:pointer">Login simulado e proteções extras</summary>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
+        <div class="row"><button class="btn alt" id="login">Fazer login simulado</button><span id="ckstat" class="pill">sem cookie</span></div>
+        <label class="chk"><input type="checkbox" id="ho"> Cookie HttpOnly (opcional)</label>
+        <label class="chk"><input type="checkbox" id="csp"> CSP default-src 'self' (opcional)</label>
+      </div>
+    </details>
+  </section>
+
+  <section class="card" id="form" aria-label="Formulário"></section>
+
+  <section class="card" aria-label="Resultado">
+    <span class="lbl">O que o navegador mostra</span>
+    <iframe class="frame" id="fr" sandbox="allow-scripts" title="Resultado da página"></iframe>
+    <span class="lbl">Alertas e bloqueios</span>
+    <div class="log" id="log"></div>
+  </section>
+
+  <section class="card" aria-label="Código-fonte">
+    <div class="row" style="justify-content:space-between"><span class="lbl">Código recebido (o HTML da resposta)</span><button class="btn alt" id="src">Mostrar</button></div>
+    <pre id="srcpre" hidden></pre>
+  </section>
+</div>
+<script>
+(function(){
+var TABS=[["busca","Busca"],["mural","Mural"],["dom","DOM"]];
+var CH={
+ busca:[["1.1","camisa"],["1.2","<b>camisa</b>"],["1.3","<h1>camisa</h1>"],["1.4","<i><u>camisa</u></i>"],["2.1","<script>alert('XSS')<\/script>"],["2.2","<script>alert(document.domain)<\/script>"],["2.3","<img src=x onerror=alert('XSS')>"],["2.4","<script>document.body.style.background='red'<\/script>"],["3.2","<script>alert(document.cookie)<\/script>"],["3.3","<img src=x onerror=alert(document.cookie)>"]],
+ nome:[["3.1","<script>alert(1)<\/script>"],["3.2","\"><script>alert(1)<\/script>"],["3.3","\" autofocus onfocus=\"alert(1)"],["3.4","Maria"]],
+ mural:[["4.1","Ana | Adorei o site!"],["4.2","Ana | <b>muito bom</b>"],["4.3","Bia | <script>alert('XSS armazenado')<\/script>"],["4.4","Caio | <img src=x onerror=alert(document.cookie)>"]],
+ dom:[["5.1","Maria"],["5.2","<b>Maria</b>"],["5.3","<img src=x onerror=alert(1)>"],["5.4","<script>alert(1)<\/script>"]]
+};
+var NOTE={busca:"Digite no campo ou toque em um teste. Depois toque em Enviar.",nome:"A entrada vai para dentro do atributo value do campo. Para o 3.3, toque dentro do campo no resultado.",mural:"Use o formato: nome | recado. Ao republicar a página (Recarregar), cada script salvo roda de novo.",dom:"Simula o que vem depois do # no endereço. O servidor nunca recebe esse valor."};
+var st={tab:"busca",safe:false,login:false,ho:false,csp:false,val:{busca:"camisa",nome:"visitante",mural:"Ana | Adorei o site!",dom:"Maria"},mural:[["Maria","Gostei muito do site!"],["Joao","Quando chegam os novos produtos?"]]};
+try{var sv=JSON.parse(localStorage.getItem("labxss-mural")||"null");if(sv&&sv.length)st.mural=sv}catch(e){}
+function saveM(){try{localStorage.setItem("labxss-mural",JSON.stringify(st.mural))}catch(e){}}
+function e(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;")}
+var $=function(i){return document.getElementById(i)};
+
+function body(){
+  var v=st.val[st.tab], x=st.safe?e:function(s){return s};
+  if(st.tab==="busca") return '<h2>Busca '+(st.safe?'(SEGURA)':'(VULNERAVEL)')+'</h2>\n<p>Resultados para: <b>'+x(v)+'</b></p>\n<p>Nenhum produto encontrado.</p>';
+  if(st.tab==="nome") return '<h2>Editar nome '+(st.safe?'(SEGURA)':'(VULNERAVEL)')+'</h2>\n<form>\n  Nome: <input name="nome" size="30" value="'+x(v)+'">\n</form>';
+  if(st.tab==="mural"){var h='<h2>Mural de recados '+(st.safe?'(SEGURO)':'(VULNERAVEL)')+'</h2>\n';st.mural.forEach(function(c){h+='<p><b>'+x(c[0])+'</b>: '+x(c[1])+'</p>\n'});return h}
+  return '<h2>Boas-vindas (DOM '+(st.safe?'SEGURO':'VULNERAVEL')+')</h2>\n<p id="saida"></p>\n<script>\n  var nome = decodeURIComponent(location.hash.substring(1));\n  document.getElementById("saida").'+(st.safe?'textContent':'innerHTML')+' = "Ola, " + nome;\n<\/script>';
+}
+function shim(){
+  var ck=(st.login&&!st.ho)?"sessao=abc123-admin":"";
+  var hash=st.tab==="dom"?encodeURIComponent(st.val.dom):"";
+  var j=function(s){return JSON.stringify(s).replace(/</g,"\\u003c")};
+  return '<script>(function(){var s=function(t,m){parent.postMessage({lab:1,t:t,m:String(m)},"*")};window.alert=function(m){s("a",m)};try{Object.defineProperty(document,"cookie",{get:function(){return '+j(ck)+'},set:function(){}})}catch(_){}try{Object.defineProperty(document,"domain",{get:function(){return "localhost"}})}catch(_){}document.addEventListener("securitypolicyviolation",function(ev){if(/script/.test(ev.violatedDirective))s("c",ev.violatedDirective)});window.__H='+j(hash)+';var l=location;})();<\/script>';
+}
+function srcdoc(){
+  var b=body();
+  if(st.tab==="dom"){b=b.replace("location.hash.substring(1)","window.__H")}
+  return '<!doctype html><meta charset="utf-8">'+shim()+(st.csp?'<meta http-equiv="Content-Security-Policy" content="default-src \'self\'; style-src \'unsafe-inline\'">':'')+'<style>body{font:15px/1.5 system-ui,sans-serif;margin:12px;color:#111;background:#fff}h2{margin:0 0 8px;font-size:18px}</style>'+b;
+}
+var log=[];
+function drawLog(){
+  var L=$("log");L.textContent="";
+  if(!log.length){var n=document.createElement("div");n.className="ev n";n.textContent="Nenhum alerta até agora.";L.appendChild(n);return}
+  log.forEach(function(it){var d=document.createElement("div");d.className="ev "+(it.t==="a"?"a":"c");
+    d.textContent=it.t==="a"?"ALERTA disparado pelo código injetado. Texto mostrado: "+(it.m||"(vazio)"):"CSP bloqueou o código injetado ("+it.m+")";L.appendChild(d)});
+}
+function renderFrame(){
+  log=[];drawLog();
+  $("fr").srcdoc=srcdoc();
+  $("srcpre").textContent=(st.tab==="dom"?"":"")+body();
+  $("ckstat").textContent=!st.login?"sem cookie":st.ho?"sessao (HttpOnly)":"sessao=abc123-admin";
+  $("ckstat").className="pill"+(st.login?" on":"");
+}
+window.addEventListener("message",function(ev){
+  if(ev.source!==$("fr").contentWindow||!ev.data||ev.data.lab!==1)return;
+  log.push({t:ev.data.t,m:ev.data.m});drawLog();
+});
+
+function drawForm(){
+  var F=$("form");F.textContent="";
+  var lab=document.createElement("span");lab.className="lbl";
+  lab.textContent={busca:"Busca de produtos",nome:"Editar nome",mural:"Mural de recados",dom:"Depois do # na URL"}[st.tab];F.appendChild(lab);
+  var p=document.createElement("p");p.className="note";p.textContent=NOTE[st.tab];F.appendChild(p);
+  var inp=document.createElement("input");inp.type="text";inp.id="campo";inp.value=st.val[st.tab];inp.setAttribute("autocomplete","off");inp.setAttribute("autocapitalize","off");inp.spellcheck=false;F.appendChild(inp);
+  var r=document.createElement("div");r.className="row";
+  var go=document.createElement("button");go.className="btn";go.id="go";go.textContent=st.tab==="mural"?"Publicar":"Enviar";r.appendChild(go);
+  if(st.tab==="mural"){
+    var rl=document.createElement("button");rl.className="btn alt";rl.textContent="Recarregar a página";rl.onclick=renderFrame;r.appendChild(rl);
+    var rs=document.createElement("button");rs.className="btn alt";rs.textContent="Reiniciar mural";rs.onclick=function(){st.mural=[["Maria","Gostei muito do site!"],["Joao","Quando chegam os novos produtos?"]];saveM();renderFrame()};r.appendChild(rs);
+  }
+  F.appendChild(r);
+  go.onclick=function(){
+    var v=inp.value;
+    if(st.tab==="mural"){var i=v.indexOf("|");var a=i<0?"Anonimo":v.slice(0,i).trim()||"Anonimo",t=i<0?v:v.slice(i+1).trim();st.mural.push([a,t]);saveM()}
+    st.val[st.tab]=v;renderFrame();
+  };
+  inp.addEventListener("keydown",function(k){if(k.key==="Enter")go.click()});
+  var cl=document.createElement("span");cl.className="lbl";cl.textContent="Testes prontos (toque para preencher)";F.appendChild(cl);
+  var cw=document.createElement("div");cw.className="chips";
+  CH[st.tab].forEach(function(c){var b=document.createElement("button");b.className="chip";var n=document.createElement("b");n.textContent=c[0];var k=document.createElement("code");k.textContent=c[1];b.appendChild(n);b.appendChild(k);b.onclick=function(){inp.value=c[1];inp.focus()};cw.appendChild(b)});
+  F.appendChild(cw);
+}
+function drawTabs(){
+  var T=$("tabs");T.textContent="";
+  TABS.forEach(function(t){var b=document.createElement("button");b.className="tab";b.setAttribute("role","tab");b.setAttribute("aria-selected",t[0]===st.tab);b.textContent=t[1];b.onclick=function(){location.hash=t[0]};T.appendChild(b)});
+}
+function route(){var h=location.hash.slice(1);st.tab=CH[h]?h:"busca";drawTabs();drawForm();renderFrame()}
+function mode(safe){st.safe=safe;$("bv").setAttribute("aria-pressed",!safe);$("bs").setAttribute("aria-pressed",safe);renderFrame()}
+$("bv").onclick=function(){mode(false)};$("bs").onclick=function(){mode(true)};
+$("login").onclick=function(){st.login=true;renderFrame()};
+$("ho").onchange=function(){st.ho=this.checked;renderFrame()};
+$("csp").onchange=function(){st.csp=this.checked;renderFrame()};
+$("src").onclick=function(){var h=$("srcpre").hidden;$("srcpre").hidden=!h;this.textContent=h?"Ocultar":"Mostrar"};
+window.addEventListener("hashchange",route);route();
+})();
+</script>
+
+</body>
+</html>
